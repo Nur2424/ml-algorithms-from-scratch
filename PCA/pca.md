@@ -1268,3 +1268,604 @@ If you kept **1** PC:
 eigenvectors[:,:1]:  (2 × 1)
 result:              (6 × 1)   ← reduced! ✅
 ```
+
+---
+---
+
+## Section 6: SVD Intuition — What Does SVD Actually Do?
+
+
+### SVD is just this:
+
+> **Any matrix can be broken into 3 simpler matrices.**
+
+That's the whole idea. Nothing more yet.
+
+---
+
+### Why do we care about "breaking" a matrix?
+
+Because matrices can be scary and complex.
+
+But if you break any matrix into 3 simple pieces — each piece does ONE simple thing — suddenly it's easy to understand.
+
+---
+
+### What does a matrix actually DO?
+
+A matrix **transforms points in space**.
+
+Example — take this matrix:
+
+```
+M = | 3  0 |
+    | 0  1 |
+```
+
+Feed it a point `[1, 1]`:
+
+```
+M × [1, 1] = [3, 1]
+```
+
+The point MOVED. x went from 1 → 3. y stayed the same.
+
+So `M` **stretched** space horizontally.
+
+---
+
+### Every matrix does some combination of 3 things:
+
+```
+1. Rotate   — spin the points
+2. Scale    — stretch or squish the points
+3. Rotate   — spin again
+```
+
+That's ALL any matrix ever does. SVD just **finds those 3 steps** for you.
+
+```
+M = U  ×  Σ  ×  Vᵀ
+    ↑      ↑     ↑
+  rotate  scale  rotate
+```
+
+---
+
+### Super simple analogy
+
+Imagine you're a chef rolling dough.
+
+```
+Step 1 (Vᵀ): Turn the dough to face you           ← rotate
+Step 2 (Σ):  Roll it flat with a rolling pin       ← scale (stretch)
+Step 3 (U):  Turn it again to fit the baking tray  ← rotate
+```
+
+SVD tells you exactly:
+- how much to turn (V)
+- how hard to roll (Σ)
+- how much to turn after (U)
+
+For ANY matrix — no matter how weird — those 3 steps exist.
+
+---
+
+### The 3 pieces in plain english:
+
+| Matrix | Plain english |
+|--------|--------------|
+| Vᵀ | "which directions to look at in your input" |
+| Σ | "how important each direction is" (big number = very important) |
+| U | "where those directions land in the output" |
+
+---
+
+### The only number you need to remember from Σ:
+
+Σ is diagonal — it looks like this:
+
+```
+Σ = | 3  0 |
+    | 0  1 |
+```
+
+The numbers on the diagonal are called **singular values**.
+
+```
+Big singular value  → that direction matters a LOT
+Small singular value → that direction barely matters
+```
+
+In PCA — we just **keep the big ones and throw away the small ones.**
+
+That's dimensionality reduction.
+
+---
+
+### One sentence summary:
+
+> SVD breaks any matrix into rotate → scale → rotate, and the scale step tells you exactly which directions matter most in your data.
+
+---
+---
+
+# 📐 Section 7: SVD Math — Our Real Dataset, Every Tiny Step
+
+---
+
+## Your Centered Data Matrix
+
+```
+M = [[ -2.5,  -471.6],
+     [ -1.5,  -271.6],
+     [ -0.5,   -91.6],
+     [  0.5,   128.4],
+     [  1.5,   278.4],
+     [  2.5,   428.4]]
+```
+
+Shape: **(6 × 2)** — 6 people, 2 features.
+
+We want:
+
+```
+M = U × Σ × Vᵀ
+```
+
+Three steps to find them:
+
+```
+Step 1 → find Σ  (singular values)
+Step 2 → find V  (right rotation)
+Step 3 → find U  (left rotation)
+```
+
+---
+
+## Step 1: Compute MᵀM
+
+Why? Because singular values live inside MᵀM.
+
+Mᵀ is **(2 × 6)**, M is **(6 × 2)**, so MᵀM is **(2 × 2)**.
+
+```
+MᵀM = Mᵀ × M
+```
+
+Each cell is a dot product of rows of Mᵀ with columns of M.
+
+---
+
+**Cell [0,0] — dot col₁ with itself:**
+
+```
+(-2.5)² + (-1.5)² + (-0.5)² + (0.5)² + (1.5)² + (2.5)²
+= 6.25 + 2.25 + 0.25 + 0.25 + 2.25 + 6.25
+= 17.5
+```
+
+---
+
+**Cell [1,1] — dot col₂ with itself:**
+
+```
+(-471.6)² + (-271.6)² + (-91.6)² + (128.4)² + (278.4)² + (428.4)²
+= 222,406 + 73,766 + 8,390 + 16,486 + 77,506 + 183,526
+= 582,080
+```
+
+---
+
+**Cell [0,1] and [1,0] — dot col₁ with col₂:**
+
+```
+(-2.5×-471.6) + (-1.5×-271.6) + (-0.5×-91.6) + (0.5×128.4) + (1.5×278.4) + (2.5×428.4)
+=  1179  +  407.4  +  45.8  +  64.2  +  417.6  +  1071
+= 3185
+```
+
+---
+
+**So:**
+
+```
+MᵀM = |   17.5     3185   |
+      |   3185    582080  |
+```
+
+---
+
+## Step 2: Find Eigenvalues of MᵀM → Singular Values
+
+Use `det(MᵀM - λI) = 0`:
+
+```
+det | 17.5 - λ     3185    | = 0
+    | 3185       582080 - λ|
+
+(17.5 - λ)(582080 - λ) - 3185² = 0
+```
+
+**Expand:**
+
+```
+17.5 × 582080  =  10,186,400
+17.5λ + 582080λ = 582,097.5λ
+3185²          =  10,144,225
+
+→ λ² - 582,097.5λ + (10,186,400 - 10,144,225) = 0
+→ λ² - 582,097.5λ + 42,175 = 0
+```
+
+**Quadratic formula:**
+
+```
+λ = (582,097.5 ± √(582,097.5² - 4 × 42,175)) / 2
+
+discriminant = 338,837,479,256 - 168,700
+             = 338,837,310,556
+
+√338,837,310,556 ≈ 582,097.35
+
+λ₁ = (582,097.5 + 582,097.35) / 2 ≈ 582,097.4  ← BIG
+λ₂ = (582,097.5 - 582,097.35) / 2 ≈ 0.075      ← tiny
+```
+
+**Singular values = √eigenvalues:**
+
+```
+σ₁ = √582,097.4 ≈ 762.96   ← goes into Σ
+σ₂ = √0.075     ≈ 0.274    ← goes into Σ
+```
+
+**So:**
+
+```
+Σ = | 762.96    0    |
+    |    0      0.274|
+    |    0      0    |
+    |    0      0    |
+    |    0      0    |
+    |    0      0    |
+```
+
+Only top 2 rows matter. The rest are zeros.
+
+---
+
+## Step 3: Find V — Eigenvectors of MᵀM
+
+**For λ₁ = 582,097.4:**
+
+```
+(MᵀM - λ₁I) v = 0
+
+| 17.5 - 582097.4       3185        | v = 0
+| 3185            582080 - 582097.4 |
+
+| -582,079.9    3185   | v = 0
+|  3185         -17.4  |
+```
+
+Take row 2:
+
+```
+3185 × v₁ - 17.4 × v₂ = 0
+v₁ = (17.4 / 3185) × v₂
+v₁ = 0.00546 × v₂
+```
+
+Set v₂ = 1:
+
+```
+v = [0.00546, 1]
+```
+
+Normalize:
+
+```
+length = √(0.00546² + 1²) = √(0.00003 + 1) ≈ 1.0
+
+v₁ = [0.0055, 0.99999]  ✅ ← same as PCA eigenvector!
+```
+
+---
+
+**For λ₂ = 0.075:**
+
+```
+(MᵀM - λ₂I) v = 0
+
+| 17.5 - 0.075    3185   | v = 0
+| 3185           582080  |
+
+| 17.425    3185  | v = 0
+```
+
+Take row 1:
+
+```
+17.425 × v₁ + 3185 × v₂ = 0
+v₁ = -(3185 / 17.425) × v₂
+v₁ = -182.8 × v₂
+```
+
+Set v₂ = 1:
+
+```
+v = [-182.8, 1]
+```
+
+Normalize:
+
+```
+length = √(182.8² + 1²) = √(33,415 + 1) ≈ 182.8
+
+v₂ = [-182.8/182.8,  1/182.8]
+   = [-0.99999,  0.0055]
+```
+
+---
+
+**So V and Vᵀ:**
+
+```
+V  = | 0.0055   -0.99999 |
+     | 0.99999   0.0055  |
+
+Vᵀ = | 0.0055    0.99999 |
+     |-0.99999   0.0055  |
+```
+
+---
+
+## Step 4: Find U — Left Rotation
+
+Formula:
+
+```
+u = (M × v) / σ
+```
+
+**For v₁ = [0.0055, 0.99999], σ₁ = 762.96:**
+
+Multiply each row of M by v₁:
+
+```
+Row 0: [-2.5, -471.6] · [0.0055, 0.99999] = -0.014 + (-471.59) = -471.6
+Row 1: [-1.5, -271.6] · [0.0055, 0.99999] = -0.008 + (-271.59) = -271.6
+Row 2: [-0.5,  -91.6] · [0.0055, 0.99999] = -0.003 + ( -91.59) =  -91.6
+Row 3: [ 0.5,  128.4] · [0.0055, 0.99999] =  0.003 + ( 128.39) =  128.4
+Row 4: [ 1.5,  278.4] · [0.0055, 0.99999] =  0.008 + ( 278.39) =  278.4
+Row 5: [ 2.5,  428.4] · [0.0055, 0.99999] =  0.014 + ( 428.39) =  428.4
+```
+
+Divide each by σ₁ = 762.96:
+
+```
+u₁ = [-471.6/762.96, -271.6/762.96, -91.6/762.96, 128.4/762.96, 278.4/762.96, 428.4/762.96]
+   = [-0.618, -0.356, -0.120,  0.168,  0.365,  0.562]
+```
+
+---
+
+## SVD Final Answer — Your Dataset
+
+---
+
+## Your Centered Data Matrix
+
+```
+M = [[ -2.5,  -471.6],
+     [ -1.5,  -271.6],
+     [ -0.5,   -91.6],
+     [  0.5,   128.4],
+     [  1.5,   278.4],
+     [  2.5,   428.4]]
+```
+
+---
+
+## M = U × Σ × Vᵀ
+
+---
+
+**U — Left rotation (6×2):**
+
+```
+U = | -0.618 |
+    | -0.356 |
+    | -0.120 |
+    |  0.168 |
+    |  0.365 |
+    |  0.562 |
+```
+
+---
+
+**Σ — Singular values (scaling):**
+
+```
+Σ = | 762.96    0    |
+    |    0      0.274|
+```
+
+---
+
+**Vᵀ — Right rotation (2×2):**
+
+```
+Vᵀ = | 0.0055   0.99999 |
+     |-0.99999  0.0055  |
+```
+
+---
+
+## What Each Piece Means
+
+| Matrix | Meaning |
+|--------|---------|
+| U | how each person sits in the new space |
+| Σ | how important each direction is |
+| Vᵀ | the principal component directions |
+
+---
+
+## The Two Principal Components
+
+```
+PC1 = [0.0055,  0.99999]  → explains 99.99% of variance
+PC2 = [0.99999, -0.0055]  → explains  0.01% of variance
+```
+
+---
+
+## Projected Data (U × Σ = PCA result)
+
+```
+Person 0 → -471.6
+Person 1 → -271.6
+Person 2 →  -91.6
+Person 3 →  128.4
+Person 4 →  278.4
+Person 5 →  428.4
+```
+
+2D data → 1D. Keeping 99.99% of information. ✅
+
+---
+
+## ⚠️ Key Connection to PCA
+
+| | PCA | SVD |
+|--|--|--|
+| Principal directions | Eigenvectors of covariance | Columns of V |
+| Variance explained | Eigenvalues | σ² / n |
+| Projected data | X × eigenvectors | U × Σ |
+
+```
+PCA eigenvalue = σ² / n = 762.96² / 6 = 582,097 / 6 = 97,016 ✅
+```
+
+Same number we got in PCA. Two roads, same destination. 🎯
+
+---
+---
+
+# 🔗 Section 8: PCA ↔ SVD Connection — The Most Important Section
+
+---
+
+## The Big Question
+
+We did PCA. We did SVD. Both gave us the same direction `[0.0055, 0.99999]`.
+
+**Why? Are they the same thing?**
+
+Yes. And here's exactly why.
+
+---
+
+## What PCA Does
+
+```
+Step 1: Center data → X
+Step 2: Compute covariance matrix → C = XᵀX / (n-1)
+Step 3: Find eigenvectors of C → principal components
+Step 4: Project → X × eigenvectors
+```
+
+---
+
+## What SVD Does
+
+```
+Step 1: Center data → X
+Step 2: Decompose directly → X = U × Σ × Vᵀ
+Step 3: V columns → principal components
+Step 4: Project → U × Σ
+```
+
+---
+
+## The Proof — Plain English
+
+Look at the covariance matrix:
+
+```
+C = XᵀX / (n-1)
+```
+
+Now look at MᵀM we computed in SVD:
+
+```
+MᵀM = XᵀX
+```
+
+**They are the same matrix — just scaled by (n-1).**
+
+So when PCA finds eigenvectors of `XᵀX / (n-1)` and SVD finds eigenvectors of `XᵀX` — they find the **exact same directions**.
+
+```
+PCA eigenvectors  =  SVD's V columns  ✅
+```
+
+---
+
+## The Numbers Side by Side
+
+| Thing | PCA gave us | SVD gave us |
+|-------|------------|------------|
+| Main direction | [0.0055, 0.99999] | [0.0055, 0.99999] |
+| Variance PC1 | 97,016 | σ₁²/n = 762.96²/6 = 97,016 |
+| Projected data | [-471.6 ... 428.4] | U × Σ = [-471.6 ... 428.4] |
+
+**Identical. Every single number.** ✅
+
+---
+
+## The Road Map
+
+```
+         XᵀX
+PCA: X ──────→ covariance → eigenvectors → project
+              (extra step)
+
+SVD: X ──────────────────→ V directly  → U × Σ
+              (direct)
+```
+
+SVD skips the covariance matrix entirely.
+
+---
+
+## Why Use SVD Instead of PCA Then?
+
+```
+PCA way:                          SVD way:
+1. compute XᵀX    ← can lose      1. decompose X directly
+   (n×p)(p×n)       precision        much more stable
+2. find eigenvectors               2. V = principal components
+3. project                         3. U×Σ = projected data
+```
+
+| | PCA (via covariance) | SVD (direct) |
+|--|--|--|
+| Steps | More | Fewer |
+| Numerical stability | Can lose precision | Very stable |
+| Speed on large data | Slower | Faster |
+| Result | Same | Same |
+
+> **This is why sklearn's PCA uses SVD under the hood — not eigendecomposition.**
+
+---
+
+## One Final Picture---
+
+## The One Line You Need to Remember
+
+> **PCA = SVD on centered data. V gives directions. U×Σ gives projected data.**
+
+---
+

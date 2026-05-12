@@ -865,9 +865,668 @@ The hardest stuff is **behind you**. Believe that.
 
 ---
 
+## The known-assignment case
 
+This is the **easiest** case of GMM fitting. It shows up in **exam_23062022** and **ML_662025_A**, and you've actually already seen me solve one of these in Phase 2 — but now we'll do it properly, knowing the EM framework.
 
+### The setup
 
+Normally, z is hidden. You don't know which bell each point came from. That's the whole reason EM exists.
 
+But sometimes, the exam **gives you z**. For example:
 
+$$
+\begin{array}{c|cccccccc}
+x & 3 & -5 & 2 & -1 & -3 & -2 & 4 & -4 \\
+\hline
+z & 0 & 1 & 0 & 1 & 0 & 1 & 0 & 1
+\end{array}
+$$
 
+Each point has a known label. Now, what happens to EM?
+
+---
+
+### What changes when z is known
+
+When z is known, γ is no longer a soft probability. It collapses to **hard 0s and 1s**.
+
+If point i has label z_i = k, then bell k owns it completely:
+
+$$
+\gamma_{ik} =
+\begin{cases}
+1 & \text{if } z_i = k \\
+0 & \text{otherwise}
+\end{cases}
+$$
+
+So the γ table is no longer something to compute — you can **write it down directly** from the z table.
+
+### Why this matters
+
+Look back at the M-step formulas:
+
+$$
+N_k = \sum_i \gamma_{ik}
+$$
+
+$$
+\mu_k = \frac{1}{N_k} \sum_i \gamma_{ik} \cdot x_i
+$$
+
+$$
+\sigma_k^2 = \frac{1}{N_k} \sum_i \gamma_{ik} \cdot (x_i - \mu_k)^2
+$$
+
+If γ is 0/1, the sums collapse:
+
+- $N_k$ becomes just the **count** of points in bell k (every γ is 0 or 1; sum = count).
+- $\mu_k$ becomes the **plain average** of points in bell k (only γ = 1 points contribute, with weight 1).
+- $\sigma_k^2$ becomes the **plain variance** of points in bell k.
+
+In other words, **with known z, you just do per-bell sample statistics**. No iteration. No E-step. One-shot computation.
+
+This is what was hidden inside Phase 2's known-assignment example. Now you see why it worked: γ became hard, so EM collapsed to plain averaging.
+
+---
+
+### The closed-form recipe
+
+For each bell k:
+
+$$
+N_k = \text{count of points where } z_i = k
+$$
+
+$$
+\pi_k = \frac{N_k}{N}
+$$
+
+$$
+\mu_k = \frac{1}{N_k} \sum_{i : z_i = k} x_i
+$$
+
+$$
+\sigma_k^2 = \frac{1}{N_k} \sum_{i : z_i = k} (x_i - \mu_k)^2
+$$
+
+The notation $\sum_{i : z_i = k}$ means "sum over only those points whose label is k."
+
+This is **single-Gaussian MLE applied independently to each group**. Nothing fancy.
+
+---
+
+### Worked example — ML_662025_A Q3(3)
+
+This is the same example I did in Phase 2, but now you understand *why* it works (γ is hard).
+
+Data:
+
+$$
+\begin{array}{c|cccccccc}
+x & 3 & -5 & 2 & -1 & -3 & -2 & 4 & -4 \\
+\hline
+z & 0 & 1 & 0 & 1 & 0 & 1 & 0 & 1
+\end{array}
+$$
+
+**Step 1. Group by z.**
+
+- $z = 0$: points $\{3, 2, -3, 4\}$, count $N_0 = 4$
+- $z = 1$: points $\{-5, -1, -2, -4\}$, count $N_1 = 4$
+
+**Step 2. Compute the mixing weights.**
+
+$$
+\pi_0 = \frac{N_0}{N} = \frac{4}{8} = 0.5
+$$
+
+$$
+\pi_1 = \frac{N_1}{N} = \frac{4}{8} = 0.5
+$$
+
+**Step 3. Compute the means.**
+
+$$
+\mu_0 = \frac{3 + 2 + (-3) + 4}{4} = \frac{6}{4} = 1.5
+$$
+
+$$
+\mu_1 = \frac{-5 + (-1) + (-2) + (-4)}{4} = \frac{-12}{4} = -3.0
+$$
+
+**Step 4. Compute the variances.**
+
+For bell 0, deviations from $\mu_0 = 1.5$:
+
+$$
+(3 - 1.5)^2 = 2.25
+$$
+
+$$
+(2 - 1.5)^2 = 0.25
+$$
+
+$$
+(-3 - 1.5)^2 = 20.25
+$$
+
+$$
+(4 - 1.5)^2 = 6.25
+$$
+
+Sum = $2.25 + 0.25 + 20.25 + 6.25 = 29.0$
+
+$$
+\sigma_0^2 = \frac{29.0}{4} = 7.25
+$$
+
+For bell 1, deviations from $\mu_1 = -3.0$:
+
+$$
+(-5 - (-3))^2 = 4
+$$
+
+$$
+(-1 - (-3))^2 = 4
+$$
+
+$$
+(-2 - (-3))^2 = 1
+$$
+
+$$
+(-4 - (-3))^2 = 1
+$$
+
+Sum = $4 + 4 + 1 + 1 = 10$
+
+$$
+\sigma_1^2 = \frac{10}{4} = 2.5
+$$
+
+**Final answer:**
+
+$$
+\pi = [0.5,\, 0.5], \quad \mu_0 = 1.5,\, \sigma_0^2 = 7.25, \quad \mu_1 = -3.0,\, \sigma_1^2 = 2.5
+$$
+
+This matches option A on the exam.
+
+---
+
+### Two traps to remember
+
+**Trap 1: MLE uses divide-by-N, not divide-by-(N–1).**
+
+If you reflexively use the "unbiased" sample variance $\frac{1}{N_k - 1}$ from a statistics class, you'd get $\sigma_0^2 = 29/3 \approx 9.67$, which doesn't match any answer. MLE is biased. Always divide by $N_k$.
+
+**Trap 2: Group BEFORE computing μ.**
+
+Don't compute the overall mean of all 8 points and use it for both groups. Each bell has its own mean computed only from its own points.
+
+---
+
+### Tiny check before we move on
+
+Don't compute anything. Just answer:
+
+In the known-assignment case, **why is EM not needed**? Two-sentence answer is fine.
+
+#### γ became hard, so EM collapsed to plain averaging.
+
+---
+
+Right idea. Sharpen the wording slightly — this is exam-quality only if you make the *cause* explicit:
+
+> *When z is known, the responsibilities γ are no longer unknown — they are hard 0/1 indicators read directly from z. The E-step disappears, and the M-step formulas collapse to ordinary per-group sample mean and variance, which is closed-form. No iteration needed.*
+
+The key phrase the exam grader looks for: **"the responsibilities become hard indicators."** That's the bridge between "z known" and "no iteration needed."
+
+---
+
+### Add to your notes
+
+```
+=========================================
+GMM — Phase 4: Known-Assignment Case
+=========================================
+
+[1] WHEN THIS APPLIES
+---------------------
+The training data comes with labels z_i (e.g., z ∈ {0,1,2}).
+This is the EASY case — no EM needed.
+
+[2] WHY EM COLLAPSES
+--------------------
+γᵢₖ becomes hard:  γᵢₖ = 1 if z_i = k, else 0.
+The E-step disappears (γ is given).
+M-step formulas collapse to per-group sample statistics.
+
+[3] CLOSED-FORM RECIPE
+----------------------
+For each bell k:
+  N_k = count of points with z_i = k
+  π_k = N_k / N
+  μ_k = (1/N_k) · Σ_{i : z_i = k} xᵢ      (plain average of group k)
+  σ²_k = (1/N_k) · Σ_{i : z_i = k} (xᵢ - μ_k)²   (plain variance of group k)
+
+[4] PROCEDURE ON THE EXAM
+--------------------------
+1. Group points by z value
+2. Count → N_k → π_k = N_k / N
+3. Average points in group → μ_k
+4. Squared deviations → variance σ²_k
+
+[5] TRAPS
+---------
+- MLE variance divides by N_k, NEVER (N_k - 1)
+- Group BEFORE computing μ — don't use the global mean
+- Don't sort the bells — keep z = 0 as bell 0, z = 1 as bell 1, etc.
+```
+
+---
+
+## Where we are
+
+Let me update the map:
+
+| Topic | Status |
+|---|---|
+| What a GMM is, pdf form | ✓ |
+| Why mixture vs single Gaussian | ✓ |
+| Counting modes from z-table or γ-table | ✓ |
+| Reading a γ row | ✓ |
+| Computing γ (E-step) | ✓ |
+| Updating π, μ, σ² (M-step) | ✓ |
+| Why EM converges | ✓ |
+| Sampling from a fitted GMM | ✓ |
+| Known-assignment case | ✓ |
+| GMM vs k-means | next |
+| From-scratch NumPy implementation | after k-means comparison |
+| Timed exam simulation | last |
+
+You are honestly **almost done** with the conceptual content. One more topic (GMM vs k-means), then we code it from scratch, then we drill exam questions.
+
+---
+
+## GMM vs K-Means
+
+You already know k-means at the API level. We're going to look at it through the GMM lens, because the exam frames k-means as **a special case of GMM**.
+
+### The story
+
+K-means and GMM are doing the same kind of thing — finding clusters in data — but with different assumptions and different machinery.
+
+| | **K-means** | **GMM** |
+|---|---|---|
+| What it outputs | Hard cluster assignment per point | Soft probabilities per point (γ) |
+| Cluster shape | Spherical, equal size | Any Gaussian shape (ellipses) |
+| Algorithm | Iterate: assign → update centroids | Iterate: E-step → M-step |
+| Probabilistic? | No | Yes |
+| Parameters per cluster | Just $\mu_k$ | $\pi_k, \mu_k, \Sigma_k$ |
+
+---
+
+### K-means as a special case of GMM
+
+This is the conceptual punchline. Take a GMM and make these three restrictions:
+
+1. **All bells have the same fixed variance** $\sigma^2 = \text{const}$ (spherical, equal).
+2. **All bells have equal weights** $\pi_k = 1/K$.
+3. **Force hard assignments**: instead of computing soft γ, snap each point to its single best bell. That is, set $\gamma_{ik} = 1$ for the bell with the highest score, and 0 for all others.
+
+What you get is exactly k-means:
+
+- **E-step becomes**: assign each point to the nearest centroid (because with equal $\sigma^2$ and equal $\pi$, "best bell" reduces to "closest mean" in Euclidean distance).
+- **M-step becomes**: update each centroid to be the average of its assigned points (because with hard 0/1 γ, the weighted average becomes a plain average over the assigned group).
+
+So:
+
+> **K-means = GMM with spherical equal-variance bells + equal weights + hard assignments.**
+
+You can think of k-means as a stripped-down, faster, less flexible version of GMM.
+
+---
+
+### When does each fail?
+
+This is what the exam likes to ask. Two failure modes per algorithm.
+
+#### K-means fails when:
+
+**1. Clusters have different sizes/shapes.**
+
+If one cluster is a thin elongated stripe and another is a tight ball, k-means can't represent the difference — it assumes all clusters look the same (spherical, same size). It will mis-assign points near the boundary because Euclidean distance is its only tool.
+
+**2. Clusters overlap heavily.**
+
+Points in the overlap region get hard-assigned to one cluster, but they really belong to both. K-means can't express "this point is 60% cluster A, 40% cluster B." It commits, often wrongly.
+
+#### GMM fails when:
+
+**1. A single component collapses onto one data point.**
+
+This is the **"variance collapse"** problem. If one bell's variance shrinks toward zero and centers on a single point, the likelihood for that point goes to infinity. The MLE is technically unbounded.
+
+In practice, sklearn prevents this by adding a tiny floor ($\texttt{reg\_covar}$). Without that, EM crashes or gives nonsense.
+
+**2. Wrong K.**
+
+If you tell GMM K = 5 but the data really has 3 clusters, EM will still fit 5 bells. Two of them will end up degenerate (tiny weight, or overlapping with another). You need model selection (AIC/BIC) to choose K properly.
+
+---
+
+### The exam's two trick scenarios
+
+These come from **exam_06072023**:
+
+> *"Your classmate fits k-means with $k = 1$ for digit classification..."*
+
+If $k = 1$, every point is in the same cluster. Every prediction is the same label (the mode of the training labels). **Useless classifier — always predicts the majority class.**
+
+> *"...now consider $k \approx N$, so each cluster has roughly one point."*
+
+If each cluster has one training point and you predict based on the nearest centroid's label, that's literally **1-Nearest-Neighbor** classification. The two algorithms become equivalent at this extreme.
+
+The lesson: **k controls a bias–variance trade-off in k-means classification.** Small $k$ = high bias (oversimplifies). Large $k$ = high variance (memorizes training data).
+
+---
+
+### Add to your notes
+
+```
+=========================================
+GMM — Phase 5: GMM vs K-Means
+=========================================
+```
+
+**[1] Side-by-side**
+
+| | **K-means** | **GMM** |
+|---|---|---|
+| Output | Hard label per point | Soft probabilities $\gamma$ |
+| Cluster shape | Spherical, equal | Any Gaussian (ellipses) |
+| Parameters | $\mu_k$ only | $\pi_k, \mu_k, \Sigma_k$ |
+| Probabilistic? | No | Yes |
+| Update rule | Assign to nearest, average | E-step + M-step |
+
+---
+
+**[2] K-means as a special case of GMM**
+
+K-means is GMM with three restrictions:
+
+1. All bells share the same fixed variance $\sigma^2$.
+2. All bells have equal weights $\pi_k = 1/K$.
+3. Soft assignments replaced with hard assignments:
+
+$$
+\gamma_{ik} =
+\begin{cases}
+1 & \text{if } k = \arg\max_j \, \pi_j \, \mathcal{N}(x_i \mid \mu_j, \sigma^2) \\
+0 & \text{otherwise}
+\end{cases}
+$$
+
+With these restrictions:
+- E-step becomes "assign each point to nearest centroid."
+- M-step becomes "update each centroid to the mean of its assigned points."
+
+---
+
+**[3] When each fails**
+
+**K-means fails when:**
+- Clusters have unequal sizes or non-spherical shapes.
+- Clusters overlap heavily (no way to express "60% cluster A, 40% cluster B").
+
+**GMM fails when:**
+- A bell collapses: $\sigma_k^2 \to 0$ on one data point, likelihood $\to \infty$.
+- Wrong choice of $K$ — need AIC/BIC for model selection.
+
+---
+
+**[4] Edge cases the exam likes**
+
+- $k = 1$ in k-means classification → predicts majority class always. Useless.
+- $k \approx N$ in k-means classification → reduces to **1-Nearest-Neighbor**.
+
+---
+
+### Tiny check
+
+Conceptual question:
+
+> You run k-means on a dataset of two elongated, parallel "stripe" clusters. It performs poorly — k-means tries to split each stripe in half rather than separating the two stripes.
+>
+> **Which of the three GMM-restrictions is responsible for k-means's failure here?**
+
+Just say which restriction (out of the three in section [2]) is the culprit, and one sentence why.
+
+***
+The restriction responsible is that K-means assumes clusters are spherical.
+In GMM terms, K-means is equivalent to a GMM where the covariance matrices are restricted to be identity matrices (Σ=σ2I). Because it cannot account for the "elongated" shape (non-spherical covariance), it assumes every cluster must be a perfect circle/ball of equal size, causing it to fail on stripes.
+***
+
+Exactly right — and your answer is technically deeper than the question required. You named the precise mathematical mechanism: restriction 1 (the spherical, equal-variance assumption) is implemented as $\Sigma_k = \sigma^2 I$ in GMM terms. That's the kind of answer that gets full marks.
+
+One small refinement for the exam:
+
+> *K-means is GMM with $\Sigma_k = \sigma^2 I$ — a single shared scalar variance times the identity matrix. This forces every cluster to be a circular ball of the same size. Elongated stripes have anisotropic covariance (much wider in one direction than the other), which $\sigma^2 I$ cannot represent. GMM with **full** covariance matrices $\Sigma_k$ can model the stripes correctly; the price is more parameters and slower fitting.*
+
+The phrase **"anisotropic covariance"** is the technical term — different variances in different directions. K-means assumes isotropic (same in all directions). Worth knowing.
+
+---
+
+## Where we are now
+
+You've now covered **every conceptual topic on the exam**. Look at the map:
+
+| Topic | Status |
+|---|---|
+| What a GMM is, pdf form | ✓ |
+| Why mixture vs single Gaussian | ✓ |
+| Counting modes from z-table or γ-table | ✓ |
+| Reading a γ row | ✓ |
+| Computing γ (E-step) | ✓ |
+| Updating π, μ, σ² (M-step) | ✓ |
+| Why EM converges | ✓ |
+| Sampling from a fitted GMM | ✓ |
+| Known-assignment case | ✓ |
+| GMM vs k-means | ✓ |
+| From-scratch NumPy implementation | next |
+| Timed exam simulation | last |
+
+Two phases left, both **practical** rather than conceptual:
+
+- **Phase 6: NumPy implementation.** Translate everything you know into code. This locks the formulas in your head and makes you spot trap questions instantly.
+
+---
+
+# NumPy that fit a GMM from scratch and converge on real data.
+
+---
+
+## Step 1: Make a toy dataset
+
+We'll generate data from a known GMM (two bells) so we can check whether our algorithm recovers the truth.We have 200 points. We *know* the truth (π = [0.4, 0.6], μ = [-3, 4], σ² = [1, 2]) but our EM algorithm will only see the points `X` and have to figure it out.
+
+Notice the points: -3.68, 4.33, 4.41, 2.99, -1.13... Some clearly belong to bell 0 (near -3) and some to bell 1 (near 4). Real EM has to discover this from the numbers alone.
+
+---
+
+## Step 2: A single Gaussian density function
+
+Before EM, we need a helper: given a point and a bell's parameters, compute the bell value $\mathcal{N}(x \mid \mu, \sigma^2)$.
+
+Recall the formula:
+
+$$
+\mathcal{N}(x \mid \mu, \sigma^2) = \frac{1}{\sqrt{2\pi\sigma^2}} \exp\!\left(-\frac{(x - \mu)^2}{2\sigma^2}\right)
+$$Works. At the peak (x = μ), the density is $1/\sqrt{2\pi} ≈ 0.3989$. Far from the mean, it decays to essentially zero. Standard bell behavior.
+
+---
+
+## Step 3: The E-step — compute γ
+
+This is the heart of EM. For every point i and every bell k, compute:
+
+$$
+\gamma_{ik} = \frac{\pi_k \cdot \mathcal{N}(x_i \mid \mu_k, \sigma_k^2)}{\sum_{j=1}^{K} \pi_j \cdot \mathcal{N}(x_i \mid \mu_j, \sigma_j^2)}
+$$
+
+In code, we want γ to be a matrix of shape `(N, K)` — one row per point, one column per bell.Read this output carefully — it shows EM "thinking."
+
+- Point x = -1 → γ = [0.622, 0.378, 0.000]. Bell 0 (centered at -1) is the best fit. Bell 2 (centered at 7) is so far away its responsibility is essentially zero.
+- Point x = 7 → γ = [0.000, 0.000, 1.000]. Bell 2 owns it completely. (Familiar from the exam table!)
+- All rows sum to 1. ✓
+
+**This is exactly what the exam asks you to compute by hand**, and now you've written the code that does it.
+
+---
+
+## Step 4: The M-step — update π, μ, σ²
+
+Recall the formulas:
+
+$$
+N_k = \sum_i \gamma_{ik}, \qquad \pi_k = \frac{N_k}{N}
+$$
+
+$$
+\mu_k = \frac{1}{N_k} \sum_i \gamma_{ik} \cdot x_i, \qquad \sigma_k^2 = \frac{1}{N_k} \sum_i \gamma_{ik} \cdot (x_i - \mu_k)^2
+$$**π = [0.4325, 0.2450, 0.3225]** — exact match with the exam answer A from ML_Jan_19_2026.
+
+You just wrote the code that produces the exam's correct answer. If you ever doubt your by-hand computation, this is the reference.
+
+Two extra observations on the new μ:
+
+- Bell 1's new mean is **4.10** because the point x = 7 (with γ = 1 for bell 1) pulls the mean strongly to the right.
+- Bell 1's new variance is **11.71** — huge, because bell 1 owns both x = -1 (γ = 0.15) and x = 7 (γ = 1.00), which are very far apart.
+
+This is EM doing its job: γ told us bell 1 owns wildly separated points, so bell 1's variance has to grow to "explain" them all.
+
+---
+
+## Step 5: The full EM loop
+
+Now glue it together. Initialize, loop until convergence.Look at this carefully. **Three things to notice:**
+
+### 1. The log-likelihood goes up every iteration
+
+That last check confirms it: `All log-likelihood increases non-negative? True`. The minimum increase is `3.04e-08` — essentially zero at convergence, but **never negative**. This is the monotonicity guarantee we talked about. You wrote it; it worked.
+
+### 2. The algorithm recovered the truth — but with bells swapped
+
+- True μ = [-3, 4]. Estimated μ = [4.095, -3.000]. ✓ but swapped order.
+- True π = [0.4, 0.6]. Estimated π = [0.555, 0.445]. ✓ but swapped.
+
+**This is called the label-switching problem.** EM doesn't know which bell is "bell 0" and which is "bell 1." The labels are arbitrary. Bell 0 in the truth corresponds to bell 1 in our estimate, and vice versa. Both fits are equally good — they describe the same density.
+
+This is a known issue in GMM, not a bug. If you reorder estimates by mean:
+- Truth (sorted): μ = [-3, 4], π = [0.4, 0.6]
+- Ours (sorted): μ = [-3.000, 4.095], π = [0.445, 0.555]
+
+Very close. The fit is genuinely good.
+
+### 3. Convergence took 26 iterations
+
+In the early iterations, the means are barely moving (both stuck around 0-2). Around iteration 15-20, they suddenly snap into place. That's typical EM behavior: a slow warmup, then a rapid commitment to a configuration.
+
+---
+
+## Step 6: Compare with sklearn
+
+The acid test. Does sklearn give us the same answer?**Identical results.**
+
+```
+              pi              mu             var
+Ours:    [0.445, 0.555]   [-3.000, 4.095]   [1.053, 1.516]
+Sklearn: [0.445, 0.555]   [-3.000, 4.095]   [1.053, 1.516]
+```
+
+Our 50-line implementation matches sklearn to the third decimal. That's not a coincidence — sklearn does the **exact same math**. The differences in real life would be:
+
+1. **Speed**: sklearn uses vectorized BLAS, our loop is slower for large N.
+2. **Numerical stability**: sklearn works in log-space (log-sum-exp), so it doesn't underflow in high dimensions. Our version is fine for 1D.
+3. **Initialization**: sklearn uses k-means by default; we used random data points. Both work here.
+4. **The reg_covar trick**: sklearn adds 1e-6 to the variance to prevent collapse. We added the same `np.maximum(var, 1e-6)` floor.
+
+Why didn't we recover the *true* parameters perfectly (true μ = [-3, 4], we got [-3, 4.095])? Because N = 200 is a finite sample. With N → ∞, both ours and sklearn's estimates would converge to the truth. With N = 200, both stop at the same (slightly biased) point. **That's not algorithm error — that's sampling noise.**
+
+---
+
+## Add to your notes
+
+```
+=========================================
+GMM — Phase 6: NumPy Implementation
+=========================================
+```
+
+**[1] Code skeleton — memorize the structure**
+
+```python
+def gaussian_1d(x, mu, var):
+    return (1/sqrt(2*pi*var)) * exp(-0.5*(x-mu)**2 / var)
+
+def e_step(X, pi, mu, var):
+    # gamma[i,k] = pi_k * N(x_i|mu_k,var_k) / sum_j (pi_j * N(...))
+    for k: gamma[:,k] = pi[k] * gaussian_1d(X, mu[k], var[k])
+    gamma /= gamma.sum(axis=1, keepdims=True)
+    return gamma
+
+def m_step(X, gamma):
+    N_k = gamma.sum(axis=0)
+    pi  = N_k / N
+    mu  = (gamma.T @ X) / N_k
+    var = [(gamma[:,k] * (X - mu[k])**2).sum() / N_k[k] for k]
+    return pi, mu, var
+
+def fit_gmm(X, K):
+    initialize pi, mu, var
+    loop:
+        gamma = e_step(...)
+        pi, mu, var = m_step(...)
+        check log-likelihood convergence
+```
+
+---
+
+**[2] Key implementation details**
+
+- $\gamma$ has shape **(N, K)**: rows = points, cols = bells.
+- $N_k$ is the **column sum** of γ (sums across all points, for each bell).
+- `(gamma.T @ X) / N_k` is the vectorized form of $\mu_k = \frac{1}{N_k}\sum_i \gamma_{ik} x_i$.
+- Floor variance with `np.maximum(var, 1e-6)` to prevent collapse.
+
+---
+
+**[3] Things you can verify yourself**
+
+- Log-likelihood is non-decreasing every iteration (monotonicity).
+- Each γ row sums to 1.
+- Sum of $N_k$ across bells equals $N$.
+- Final params match sklearn to ~3 decimals.
+
+---
+
+**[4] Why our code matches sklearn exactly**
+
+Sklearn does the same EM, just:
+- Vectorized for speed.
+- Computed in log-space (log-sum-exp) for numerical stability in high dimensions.
+- Uses k-means initialization.
+- Adds `reg_covar` (variance floor) to prevent collapse.
+
+The math is **identical**.
+
+---
+
+**[5] The label-switching "problem"**
+
+EM doesn't know which bell is "bell 0." Estimates may come out reordered relative to the truth. This is not a bug. Sort bells by mean for comparison.
+
+---
